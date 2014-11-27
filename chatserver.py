@@ -227,6 +227,8 @@ class TONChatServer(Protocol):
     
     def __init__(self, clients):
         self.clients = clients
+        self.user = ""
+        self.account_id = 0
 
     # Connection management
     def connectionMade(self):
@@ -248,19 +250,26 @@ class TONChatServer(Protocol):
                 # <account id><cookie string>
                 (id, cookie) = self.get_int(data)
                 #TODO verify cookie
+                self.user = "peeps123"
+                self.account_id = 868325
                 verified = True
                 if verified == True:
                     print "Client logged in successfully!"
                     self.transport.write(chr(1))
                     #TODO send player list
                     #sending welcome message for now
-                    self.transport.write(struct.pack('cs', chr(PK_WELCOME), "Welcome to TON"))
+                    welcomeMsg = "Welcome to"
+                    msglen = len(welcomeMsg)
+                    fmt = "b11s"
+                    #self.transport.write(struct.pack(fmt, PK_WELCOME, welcomeMsg + chr(0)))
+                    # + str(msglen) + "s"
+                    #, bytes(welcomeMsg, "ascii")))
+                    self.sendlist(id)
                 else:
                     self.transport.write(chr(0))
             elif number == PK_PINGCLIENT:
                 see.transport.write(chr(2))
-            elif number == PK_WELCOME:
-                # no data
+            elif number == PK_WELCOME:                # no data
                 self.welcome()
             elif number == PK_PINGSERVER:
                 # no data
@@ -278,14 +287,10 @@ class TONChatServer(Protocol):
                 (id, data) = self.get_int(data)	            
                 self.leave(id)
             elif number == PK_MESSAGE:
-                # <id><message>
-                (id, data) = self.get_string(data)
-                (message, data) = self.get_string(data)
-                #self.message(id, message)
-                # relay message to connected clients
-                for client in self.clients:
-                    #TODO don't echo to sending client
-                    client.transport.write(struct.pack('css', chr(PK_MESSAGE), id, message))
+                # <message>
+                (message,dummy) = self.get_string(data)
+                message = data
+                self.message(message)
             elif number == PK_WHISPER:
                 # <nick><message>
                 (nick, data) = self.get_string(data)
@@ -311,8 +316,36 @@ class TONChatServer(Protocol):
     def welcome(self):
         logging.warning("Unhandeld welcome packet")
     
-    def message(self, id, text):
-        logging.warning("Unhandeld message packet")
+    def sendlist(self, id):
+        # assume the following player list
+        userlist = [("nick1", "1"), ("nick2", "2")]
+        # message format is as follows
+        # PK_LIST "Savage 2" numplayers (int4le) array_nickname_accountid ..unknown bytes..
+        sav2 = "Savage 2"
+        sav2len = len(sav2) + 1
+        nPlayers = len(userlist)
+        fmt = "<" + "b" + str(sav2len) + "si"
+        data = struct.pack(fmt, PK_LIST, sav2 + chr(0), nPlayers)
+        for user in userlist:
+            (nickname, account_id) = user
+            print nickname
+            print account_id
+            nicklen = len(nickname) + 1
+            fmt = "<" + str(nicklen) + "si"
+            data = data + struct.pack(fmt, nickname + chr(0), int(account_id))
+        self.transport.write(data)
+
+    def message(self, text):
+        print "Received message: " + text
+        # relay message to connected clients
+        for client in self.clients:
+            #TODO don't echo to sending client
+            print "Relaying message to connected client"
+            nickname = self.account_id
+            message = text
+            msglen = len(message) + 1
+            fmt = "<bi" + str(msglen) + "s" 
+            client.transport.write(struct.pack(fmt, PK_MESSAGE, nickname, message))
         
     def whisper(self, source, text):
         logging.warning("Unhandeld whisper packet")
