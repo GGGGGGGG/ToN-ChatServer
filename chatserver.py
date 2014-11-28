@@ -6,8 +6,24 @@ from twisted.internet.protocol import Protocol, ReconnectingClientFactory
 from twisted.internet.protocol import Factory
 from twisted.internet import reactor
 import struct
-
+import mysql.connector
 from event import Event
+import re
+import urllib2
+#try:
+#    from urllib.request import urlopen
+#except ImportError:
+#    from urllib2 import urlopen
+
+
+# MySQL database config
+config = {
+  'user': 'masterserver',
+  'password': 'amtsreesvrre',
+  'host': '127.0.0.1',
+  'database': 'masterserver',
+  'raise_on_warnings': True,
+}
 
 # Packet types
 PK_LOGIN=0
@@ -250,9 +266,11 @@ class TONChatServer(Protocol):
                 # <account id><cookie string>
                 (id, cookie) = self.get_int(data)
                 #TODO verify cookie
-                self.user = "peeps123"
-                self.account_id = 868325
-                verified = True
+                #verified = False
+                #self.user = "peeps123"
+                #self.account_id = 868325
+                verified = self.handleLogin(id, cookie)
+                #verified = True
                 if verified == True:
                     print "Client logged in successfully!"
                     self.transport.write(chr(1))
@@ -315,6 +333,36 @@ class TONChatServer(Protocol):
     # Callbacks for individual packets
     def welcome(self):
         logging.warning("Unhandeld welcome packet")
+
+    def handleLogin(self, id, cookie):
+        return self.handleLoginWeb(id, cookie)
+
+    def handleLoginWeb(self, id, cookie):
+        resp = urllib2.urlopen("http://savage2.com/en/player_stats.php?id=" + str(id))
+        res = re.findall(r"<span class=g16><b>\w+</b>", resp.read())
+        if len(res) == 0:
+            return False
+        data = res[0][19:]
+        offset = data.find('<')
+        self.user = data[19:offset]
+        self.account_id = id
+        print "Found user through web:" + self.user
+        return True
+
+    def handleLoginDb(self, id, cookie):
+        verified = False
+        cnx = mysql.connector.connect(**config)
+        cur = db.cursor()
+        query = "select username,id from users where cookie=" + cookie
+        cur.execute(query)
+        rows = cur.fetchall()
+        if len(rows) == 1:
+            self.user = rows[0].col[0]
+            self.account_id = rows[0].col[0]
+            verified = True
+        cnx.close()
+        return verified
+
     
     def sendlist(self, id):
         # assume the following player list
