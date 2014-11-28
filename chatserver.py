@@ -407,8 +407,15 @@ class TONChatServer(Protocol):
             fmt = "<bi" + str(msglen) + "s" 
             client.transport.write(struct.pack(fmt, PK_MESSAGE, self.account_id, message))
         
-    def whisper(self, source, text):
-        logging.warning("Unhandeld whisper packet")
+    def whisper(self, destnick, msg):
+        for client in self.clients:
+            if client.user != destnick:
+                continue
+            nicklen = len(self.user) + 1
+            msglen = len(msg) + 1
+            fmt = "b" + str(nicklen) + "s" + str(msglen) + "s"
+            client.transport.write(struct.pack(fmt, PK_WHISPER, self.user + chr(0), msg + chr(0)))
+            break
         
     def join(self, name, id):
         logging.warning("Unhandeld join packet")
