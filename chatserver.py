@@ -340,11 +340,13 @@ class TONChatServer(Protocol):
     def handleLoginWeb(self, id, cookie):
         resp = urllib2.urlopen("http://savage2.com/en/player_stats.php?id=" + str(id))
         res = re.findall(r"<span class=g16><b>\w+</b>", resp.read())
+        print "res:"
+        print res
         if len(res) == 0:
             return False
         data = res[0][19:]
         offset = data.find('<')
-        self.user = data[19:offset]
+        self.user = data[:offset]
         self.account_id = id
         print "Found user through web:" + self.user
         return True
@@ -366,34 +368,44 @@ class TONChatServer(Protocol):
     
     def sendlist(self, id):
         # assume the following player list
-        userlist = [("nick1", "1"), ("nick2", "2")]
+        ##userlist = [("nick1", "1"), ("nick2", "2")]
         # message format is as follows
         # PK_LIST "Savage 2" numplayers (int4le) array_nickname_accountid ..unknown bytes..
         sav2 = "Savage 2"
         sav2len = len(sav2) + 1
-        nPlayers = len(userlist)
+        #nPlayers = len(userlist)
+        nPlayers = len(self.clients)
         fmt = "<" + "b" + str(sav2len) + "si"
         data = struct.pack(fmt, PK_LIST, sav2 + chr(0), nPlayers)
-        for user in userlist:
-            (nickname, account_id) = user
+        #for user in userlist:
+        for client in self.clients:
+            #(nickname, account_id) = user
+            if client.account_id == id:
+                continue
+            nickname = client.user
+            account_id = client.account_id
             print nickname
             print account_id
             nicklen = len(nickname) + 1
             fmt = "<" + str(nicklen) + "si"
             data = data + struct.pack(fmt, nickname + chr(0), int(account_id))
+            # also send that existing client a join notification
+            userlen = len(self.user) + 1
+            joinfmt = "<b" + str(userlen) + "si"
+            client.transport.write(struct.pack(joinfmt, PK_JOIN, self.user + chr(0), int(self.account_id))) 
         self.transport.write(data)
 
     def message(self, text):
         print "Received message: " + text
         # relay message to connected clients
         for client in self.clients:
-            #TODO don't echo to sending client
+            if client == self:
+                continue
             print "Relaying message to connected client"
-            nickname = self.account_id
             message = text
             msglen = len(message) + 1
             fmt = "<bi" + str(msglen) + "s" 
-            client.transport.write(struct.pack(fmt, PK_MESSAGE, nickname, message))
+            client.transport.write(struct.pack(fmt, PK_MESSAGE, self.account_id, message))
         
     def whisper(self, source, text):
         logging.warning("Unhandeld whisper packet")
