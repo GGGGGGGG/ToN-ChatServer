@@ -216,13 +216,21 @@ class TONChatServer(Protocol):
             break
         
     def join(self, name, id):
-        logging.warning("Unhandeld join packet")
+        for client in self.clients:
+            if client.account_id == self.account_id:
+                continue
+            userlen = len(self.user) + 1
+            joinfmt = "<b" + str(userlen) + "si"
+            client.transport.write(struct.pack(joinfmt, PK_JOIN, self.user + chr(0), int(self.account_id)))
         
     def leave(self, id):
-        logging.warning("Unhandeld leave packet")
+        for client in self.clients:
+            if client.account_id == self.account_id:
+                continue
+            client.transport.write(struct.pack("<bi", PK_LEAVE, self.account_id))
         
     def ping(self):
-        logging.warning("Unhandeld ping packet")
+        self.transport.write(struct.pack("b", PK_PINGSERVER))
 
 
 class TONChatServerFactory(Factory):
