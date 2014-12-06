@@ -10,6 +10,7 @@ import mysql.connector
 from event import Event
 import re
 import urllib2
+import marshal
 #try:
 #    from urllib.request import urlopen
 #except ImportError:
@@ -23,6 +24,7 @@ config = {
   'host': '127.0.0.1',
   'database': 'masterserver',
   'raise_on_warnings': True,
+  #'charset' : 'latin1'
 }
 
 # Packet types
@@ -133,7 +135,7 @@ class TONChatServer(Protocol):
         logging.warning("Unhandeld welcome packet")
 
     def handleLogin(self, id, cookie):
-        return self.handleLoginWeb(id, cookie)
+        return self.handleLoginDb(id, cookie)
 
     def handleLoginWeb(self, id, cookie):
         resp = urllib2.urlopen("http://savage2.com/en/player_stats.php?id=" + str(id))
@@ -151,15 +153,24 @@ class TONChatServer(Protocol):
 
     def handleLoginDb(self, id, cookie):
         verified = False
+        password = open("/var/www/masterserver1.talesofnewerth.com/dbp").read(100).strip()
+        config['password'] = password
         cnx = mysql.connector.connect(**config)
-        cur = db.cursor()
-        query = "select username,id from users where cookie=" + cookie
+        cur = cnx.cursor(buffered=True)
+        cookie = cookie.decode('ascii')
+        # ugly hack to match data type otherwise query wouldn't fetch rows unless cookie is hardcoded
+        # would someone more experienced please fix this?!
+        str =  marshal.dumps(cookie)
+        str = str.replace("u!", "t ")
+        cookie = marshal.loads(str)
+        query = "SELECT * FROM users WHERE cookie='" + cookie + "'"
         cur.execute(query)
-        rows = cur.fetchall()
-        if len(rows) == 1:
-            self.user = rows[0].col[0]
-            self.account_id = rows[0].col[0]
+        row = cur.fetchone()
+        if row != None:
+            self.user = row[1]
+            self.account_id = row[0]
             verified = True
+        cur.close()
         cnx.close()
         return verified
 
@@ -172,7 +183,7 @@ class TONChatServer(Protocol):
         sav2 = "Savage 2"
         sav2len = len(sav2) + 1
         #nPlayers = len(userlist)
-        nPlayers = len(self.clients)
+        nPlayers = len(self.clients) - 1
         fmt = "<" + "b" + str(sav2len) + "si"
         data = struct.pack(fmt, PK_LIST, sav2 + chr(0), nPlayers)
         #for user in userlist:
@@ -241,5 +252,8 @@ class TONChatServerFactory(Factory):
     def buildProtocol(self, addr):
         return TONChatServer(self.clients)
 
+from twisted.application import service
+
+application = service.Application("chatserver")
 reactor.listenTCP(11030, TONChatServerFactory())
 reactor.run()
