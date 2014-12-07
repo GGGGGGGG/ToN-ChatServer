@@ -157,18 +157,24 @@ class TONChatServer(Protocol):
         config['password'] = password
         cnx = mysql.connector.connect(**config)
         cur = cnx.cursor(buffered=True)
-        cookie = cookie.decode('ascii')
         # ugly hack to match data type otherwise query wouldn't fetch rows unless cookie is hardcoded
         # would someone more experienced please fix this?!
+        cookie = cookie.decode('ascii')
         str =  marshal.dumps(cookie)
         str = str.replace("u!", "t ")
         cookie = marshal.loads(str)
         query = "SELECT * FROM users WHERE cookie='" + cookie + "'"
         cur.execute(query)
+        #cur.execute("SELECT * FROM users WHERE cookie='%s'", (cookie, ))
+        #cnx.commit() 
         row = cur.fetchone()
-        if row != None:
+        if row:
             self.user = row[1]
             self.account_id = row[0]
+            print "Found user in database"
+            print self.user
+            print "Account id is"
+            print self.account_id
             verified = True
         cur.close()
         cnx.close()
@@ -186,7 +192,8 @@ class TONChatServer(Protocol):
         nPlayers = len(self.clients) - 1
         fmt = "<" + "b" + str(sav2len) + "si"
         data = struct.pack(fmt, PK_LIST, sav2 + chr(0), nPlayers)
-        #for user in userlist:
+        print "Sending online users list to user:"
+        print self.user
         for client in self.clients:
             #(nickname, account_id) = user
             if client.account_id == id:
@@ -197,11 +204,11 @@ class TONChatServer(Protocol):
             print account_id
             nicklen = len(nickname) + 1
             fmt = "<" + str(nicklen) + "si"
-            data = data + struct.pack(fmt, nickname + chr(0), int(account_id))
+            data = data + struct.pack(fmt, str(nickname + chr(0)), int(account_id))
             # also send that existing client a join notification
             userlen = len(self.user) + 1
             joinfmt = "<b" + str(userlen) + "si"
-            client.transport.write(struct.pack(joinfmt, PK_JOIN, self.user + chr(0), int(self.account_id))) 
+            client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id))) 
         self.transport.write(data)
 
     def message(self, text):
