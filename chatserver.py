@@ -37,7 +37,9 @@ PK_LIST=5
 PK_JOIN=6
 PK_LEAVE=7
 PK_WHISPER=9
-
+PK_JOINGAME=16
+PK_INGAME=17
+PK_LEAVEGAME=18
 
 class TONChatServer(Protocol):
     
@@ -114,6 +116,14 @@ class TONChatServer(Protocol):
                 (nick, data) = self.get_string(data)
                 (message, data) = self.get_string(data)
                 self.whisper(nick, message)
+            elif number == PK_JOINGAME:
+                # <server_id>
+                (server_id, data) = self.get_int(data)
+                # TODO send out PK_LEAVE and list of those in game
+            #elif number == PK_INGAME:
+                # TODO update client status to in-game?
+            #elif number == PK_LEAVEGAME:
+                # TODO
             else:
                 logging.warning("Packet is unknown: %s" % number)
                 data = ""
@@ -218,7 +228,7 @@ class TONChatServer(Protocol):
             if client == self:
                 continue
             print "Relaying message to connected client"
-            message = text
+            message = str(text)
             msglen = len(message) + 1
             fmt = "<bi" + str(msglen) + "s" 
             client.transport.write(struct.pack(fmt, PK_MESSAGE, self.account_id, message))
