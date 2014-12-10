@@ -240,7 +240,7 @@ class TONChatServer(Protocol):
             nicklen = len(self.user) + 1
             msglen = len(msg) + 1
             fmt = "b" + str(nicklen) + "s" + str(msglen) + "s"
-            client.transport.write(struct.pack(fmt, PK_WHISPER, self.user + chr(0), msg + chr(0)))
+            client.transport.write(struct.pack(fmt, PK_WHISPER, str(self.user + chr(0)), msg + chr(0)))
             break
         
     def join(self, name, id):
