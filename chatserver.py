@@ -21,7 +21,7 @@ import marshal
 config = {
   'user': 'masterserver',
   'password': '',
-  'host': '37.187.122.225',
+  'host': '127.0.0.1',
   'database': 'masterserver',
   'raise_on_warnings': True,
   #'charset' : 'latin1'
@@ -41,12 +41,17 @@ PK_JOINGAME=16
 PK_INGAME=17
 PK_LEAVEGAME=18
 
+# status used to distinguish between players in lobby and those in game
+LOBBY=1
+INGAME=2
+
 class TONChatServer(Protocol):
     
     def __init__(self, clients):
         self.clients = clients
         self.user = ""
         self.account_id = 0
+        self.status = LOBBY
 
     # Connection management
     def connectionMade(self):
@@ -54,7 +59,8 @@ class TONChatServer(Protocol):
         self.clients.append(self)
         
     def connectionLost(self, reason):
-        print "Lost a client"     
+        print "Lost a client"
+        self.leave(self.account_id)
         self.clients.remove(self)       
     
     # Receiving data
@@ -94,14 +100,14 @@ class TONChatServer(Protocol):
             elif number == PK_PINGSERVER:
                 # no data
                 self.ping()
-            elif number == PK_LIST:
-                # not supported at the moment
-                data = ""
-            elif number == PK_JOIN:
-                # <name><id>
-                (name, data) = self.get_string(data)
-                (id, data) = self.get_int(data)
-                self.join(name, id)
+            #elif number == PK_LIST:
+            #    # not supported at the moment
+            #    data = ""
+            #elif number == PK_JOIN:
+            #    # <name><id>
+            #    (name, data) = self.get_string(data)
+            #    (id, data) = self.get_int(data)
+            #    self.join(name, id)
             elif number == PK_LEAVE:
                 # <id>
                 (id, data) = self.get_int(data)	            
@@ -119,11 +125,14 @@ class TONChatServer(Protocol):
             elif number == PK_JOINGAME:
                 # <server_id>
                 (server_id, data) = self.get_int(data)
-                # TODO send out PK_LEAVE and list of those in game
+                self.status = INGAME
+		self.leave(self.account_id)
+                # TODO PK_LIST list of those in game
             #elif number == PK_INGAME:
                 # TODO update client status to in-game?
-            #elif number == PK_LEAVEGAME:
-                # TODO
+            elif number == PK_LEAVEGAME:
+                self.status = LOBBY
+                self.join()
             else:
                 logging.warning("Packet is unknown: %s" % number)
                 data = ""
@@ -206,7 +215,7 @@ class TONChatServer(Protocol):
         print self.user
         for client in self.clients:
             #(nickname, account_id) = user
-            if client.account_id == id:
+            if client.account_id == id or client.status == INGAME:
                 continue
             nickname = client.user
             account_id = client.account_id
@@ -216,18 +225,19 @@ class TONChatServer(Protocol):
             fmt = "<" + str(nicklen) + "si"
             data = data + struct.pack(fmt, str(nickname + chr(0)), int(account_id))
             # also send that existing client a join notification
-            userlen = len(self.user) + 1
-            joinfmt = "<b" + str(userlen) + "si"
-            client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id))) 
+            if client.status == LOBBY:
+                userlen = len(self.user) + 1
+                joinfmt = "<b" + str(userlen) + "si"
+                client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id))) 
         self.transport.write(data)
 
     def message(self, text):
         print "Received message: " + text
         # relay message to connected clients
         for client in self.clients:
-            if client == self:
+            if client == self or client.status == INGAME:
                 continue
-            print "Relaying message to connected client"
+            #print "Relaying message to connected client"
             message = str(text)
             msglen = len(message) + 1
             fmt = "<bi" + str(msglen) + "s" 
@@ -243,17 +253,17 @@ class TONChatServer(Protocol):
             client.transport.write(struct.pack(fmt, PK_WHISPER, str(self.user + chr(0)), msg + chr(0)))
             break
         
-    def join(self, name, id):
+    def join(self):
         for client in self.clients:
-            if client.account_id == self.account_id:
+            if client.account_id == self.account_id or client.status == INGAME:
                 continue
             userlen = len(self.user) + 1
             joinfmt = "<b" + str(userlen) + "si"
-            client.transport.write(struct.pack(joinfmt, PK_JOIN, self.user + chr(0), int(self.account_id)))
+            client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id)))
         
     def leave(self, id):
         for client in self.clients:
-            if client.account_id == self.account_id:
+            if client.account_id == self.account_id or client.status == INGAME:
                 continue
             client.transport.write(struct.pack("<bi", PK_LEAVE, self.account_id))
         
