@@ -21,7 +21,7 @@ import marshal
 config = {
   'user': 'masterserver',
   'password': '',
-  'host': '127.0.0.1',
+  'host': '37.187.122.225',
   'database': 'masterserver',
   'raise_on_warnings': True,
   #'charset' : 'latin1'
@@ -88,7 +88,7 @@ class TONChatServer(Protocol):
                 else:
                     self.transport.write(chr(0))
             elif number == PK_PINGCLIENT:
-                see.transport.write(chr(2))
+                self.transport.write(chr(PK_PINGSERVER))
             elif number == PK_WELCOME:                # no data
                 self.welcome()
             elif number == PK_PINGSERVER:
