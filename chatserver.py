@@ -27,7 +27,7 @@ config = {
   #'charset' : 'latin1'
 }
 
-# Packet types
+###  Packet types ###
 PK_LOGIN=0
 PK_WELCOME=1
 PK_PINGSERVER=2
@@ -37,6 +37,10 @@ PK_LIST=5
 PK_JOIN=6
 PK_LEAVE=7
 PK_WHISPER=9
+PK_FRIENDLIST=12
+# client to server
+PK_ADDBUDDY=14
+PK_REMBUDDY=15
 PK_JOINGAME=16
 PK_INGAME=17
 PK_LEAVEGAME=18
@@ -52,6 +56,7 @@ class TONChatServer(Protocol):
         self.user = ""
         self.account_id = 0
         self.status = LOBBY
+        self.server_id = 0
 
     # Connection management
     def connectionMade(self):
@@ -61,6 +66,7 @@ class TONChatServer(Protocol):
     def connectionLost(self, reason):
         print "Lost a client"
         self.leave(self.account_id)
+        self.send_friend_notification(1)
         self.clients.remove(self)       
     
     # Receiving data
@@ -87,6 +93,7 @@ class TONChatServer(Protocol):
                     # + str(msglen) + "s"
                     #, bytes(welcomeMsg, "ascii")))
                     self.sendlist(id)
+                    self.send_friend_notification(3)
                 else:
                     self.transport.write(chr(0))
             elif number == PK_PINGCLIENT:
@@ -121,13 +128,20 @@ class TONChatServer(Protocol):
                 # <server_id>
                 (server_id, data) = self.get_int(data)
                 self.status = INGAME
+                self.server_id = server_id
 		self.leave(self.account_id)
                 # TODO PK_LIST list of those in game
-            #elif number == PK_INGAME:
-                # TODO update client status to in-game?
+            elif number == PK_INGAME:
+                self.send_friend_notification(5)
             elif number == PK_LEAVEGAME:
                 self.status = LOBBY
                 self.join()
+                self.server_id = 0
+                self.send_friend_notification(3)
+            elif number == PK_ADDBUDDY:
+                logging.warning("Packet ADDBUDDY unhandled")
+            elif number == PK_REMBUDDY:
+                logging.warning("Packet REMBUDDY unhandled")
             else:
                 logging.warning("Packet is unknown: %02x" % number)
                 print ":".join("{:02x}".format(ord(c)) for c in data)
@@ -192,7 +206,7 @@ class TONChatServer(Protocol):
         # assume the following player list
         ##userlist = [("nick1", "1"), ("nick2", "2")]
         # message format is as follows
-        # PK_LIST "Savage 2" numplayers (int4le) array_nickname_accountid ..unknown bytes..
+        # PK_LIST "Savage 2" numplayers (int4le) array_nickname_accountid ..buddylist notification..
         sav2 = "Savage 2"
         sav2len = len(sav2) + 1
         #nPlayers = len(userlist)
@@ -219,15 +233,43 @@ class TONChatServer(Protocol):
                 userlen = len(self.user) + 1
                 joinfmt = "<b" + str(userlen) + "si"
                 client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id)))
-            # send buddylist online notification
-            accid = int(self.account_id)
-            #client.transport.write(struct.pack("<ibb", accid, 0, 3));
-            #isBuddy = True
-            #if isBuddy == True:
-            #    client.transport.write(struct.pack("<biibbi", 12, 1, accid, 1, 0, 0))
-        server_id = 4
-        data = data + struct.pack("<biibbi", 12, 1, int(buddy_id), 5, 0, server_id)
+        # TODO for all buddies get friend status and append to list (placeholder for now)
+        data = data + struct.pack("<biibbi", 12, 1, int(buddy_id), 3, 0, 0)
         self.transport.write(data)
+
+    def build_server_pklist(self, server_id):
+        num_users = 0
+        data = ""
+        for client in self.clients:
+            if client == self or client.server_id != server_id:
+                continue
+            num_users = num_users + 1
+            nickname = client.user
+            account_id = int(client.account_id)
+            nicklen = len(nickname) + 1
+            fmt = "<" + str(nicklen) + "si"
+            data = data + struct.pack(fmt, str(nickname + chr(0)), account_id)
+        channel_name = "Server" + str(server_id)
+        if server_id == 0:
+            channel_name = "Savage 2"
+        channel_len = len(channel_name) + 1
+        fmt = "<b" + str(channel_len) + "si"
+        data = struct.pack(fmt, PK_LIST, channel_name + chr(0), num_users) + data
+        return data
+
+    def build_friend_notification(self, status):
+        num_notifications = 1
+        data = struct.pack("<biibbi", PK_FRIENDLIST, num_notifications, int(self.account_id), status, 0, int(self.server_id))
+        return data
+
+    def send_friend_notification(self, status):
+        for client in self.clients:
+            if client == self:
+                continue
+            #this doesn't work; status doesn't show any change in other clients; PK_FRIENDLIST is sent with PK_LIST so doing that for now..yes, ugly
+            #self.transport.write(struct.pack("<biibbi", PK_FRIENDLIST, 1, int(self.account_id), status, 0, int(self.server_id)))
+            data = self.build_server_pklist(client.server_id) + self.build_friend_notification(status)
+            client.transport.write(data)
 
     def message(self, text):
         print "Received message: " + text
