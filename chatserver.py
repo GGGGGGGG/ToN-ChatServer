@@ -72,13 +72,9 @@ class TONChatServer(Protocol):
         
             if number == PK_LOGIN:
                 # <account id><cookie string>
-                (id, cookie) = self.get_int(data)
-                #TODO verify cookie
-                #verified = False
-                #self.user = "peeps123"
-                #self.account_id = 868325
+                (id, data) = self.get_int(data)
+                (cookie, data) = self.get_string(data)
                 verified = self.handleLogin(id, cookie)
-                #verified = True
                 if verified == True:
                     print "Client logged in successfully!"
                     self.transport.write(chr(1))
@@ -114,8 +110,7 @@ class TONChatServer(Protocol):
                 self.leave(id)
             elif number == PK_MESSAGE:
                 # <message>
-                (message,dummy) = self.get_string(data)
-                message = data
+                (message, data) = self.get_string(data)
                 self.message(message)
             elif number == PK_WHISPER:
                 # <nick><message>
@@ -134,7 +129,8 @@ class TONChatServer(Protocol):
                 self.status = LOBBY
                 self.join()
             else:
-                logging.warning("Packet is unknown: %s" % number)
+                logging.warning("Packet is unknown: %02x" % number)
+                print ":".join("{:02x}".format(ord(c)) for c in data)
                 data = ""
     
     def get_byte(self, data):
@@ -176,16 +172,8 @@ class TONChatServer(Protocol):
         config['password'] = password
         cnx = mysql.connector.connect(**config)
         cur = cnx.cursor(buffered=True)
-        # ugly hack to match data type otherwise query wouldn't fetch rows unless cookie is hardcoded
-        # would someone more experienced please fix this?!
-        cookie = cookie.decode('ascii')
-        str =  marshal.dumps(cookie)
-        str = str.replace("u!", "t ")
-        cookie = marshal.loads(str)
         query = "SELECT * FROM users WHERE cookie='" + cookie + "'"
         cur.execute(query)
-        #cur.execute("SELECT * FROM users WHERE cookie='%s'", (cookie, ))
-        #cnx.commit() 
         row = cur.fetchone()
         if row:
             self.user = row[1]
@@ -213,6 +201,7 @@ class TONChatServer(Protocol):
         data = struct.pack(fmt, PK_LIST, sav2 + chr(0), nPlayers)
         print "Sending online users list to user:"
         print self.user
+        buddy_id = 0
         for client in self.clients:
             #(nickname, account_id) = user
             if client.account_id == id or client.status == INGAME:
@@ -221,6 +210,7 @@ class TONChatServer(Protocol):
             account_id = client.account_id
             print nickname
             print account_id
+            buddy_id = account_id
             nicklen = len(nickname) + 1
             fmt = "<" + str(nicklen) + "si"
             data = data + struct.pack(fmt, str(nickname + chr(0)), int(account_id))
@@ -228,7 +218,15 @@ class TONChatServer(Protocol):
             if client.status == LOBBY:
                 userlen = len(self.user) + 1
                 joinfmt = "<b" + str(userlen) + "si"
-                client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id))) 
+                client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id)))
+            # send buddylist online notification
+            accid = int(self.account_id)
+            #client.transport.write(struct.pack("<ibb", accid, 0, 3));
+            #isBuddy = True
+            #if isBuddy == True:
+            #    client.transport.write(struct.pack("<biibbi", 12, 1, accid, 1, 0, 0))
+        server_id = 4
+        data = data + struct.pack("<biibbi", 12, 1, int(buddy_id), 5, 0, server_id)
         self.transport.write(data)
 
     def message(self, text):
