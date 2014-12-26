@@ -216,6 +216,7 @@ class TONChatServer(Protocol):
         print "Sending online users list to user:"
         print self.user
         buddy_id = 0
+        buddydata = struct.pack("<bi", 12, nPlayers);
         for client in self.clients:
             #(nickname, account_id) = user
             if client.account_id == id or client.status == INGAME:
@@ -228,13 +229,18 @@ class TONChatServer(Protocol):
             nicklen = len(nickname) + 1
             fmt = "<" + str(nicklen) + "si"
             data = data + struct.pack(fmt, str(nickname + chr(0)), int(account_id))
+            # TODO buddy notification data
+            buddy_status = 3
+            if client.server_id != 0:
+                buddy_status = 5
+            buddydata = buddydata + struct.pack("<ibbi", int(client.account_id), buddy_status, 0, client.server_id)
             # also send that existing client a join notification
             if client.status == LOBBY:
                 userlen = len(self.user) + 1
                 joinfmt = "<b" + str(userlen) + "si"
                 client.transport.write(struct.pack(joinfmt, PK_JOIN, str(self.user + chr(0)), int(self.account_id)))
         # TODO for all buddies get friend status and append to list (placeholder for now)
-        data = data + struct.pack("<biibbi", 12, 1, int(buddy_id), 3, 0, 0)
+        data = data + buddydata
         self.transport.write(data)
 
     def build_server_pklist(self, server_id):
@@ -268,7 +274,7 @@ class TONChatServer(Protocol):
                 continue
             #this doesn't work; status doesn't show any change in other clients; PK_FRIENDLIST is sent with PK_LIST so doing that for now..yes, ugly
             #self.transport.write(struct.pack("<biibbi", PK_FRIENDLIST, 1, int(self.account_id), status, 0, int(self.server_id)))
-            data = self.build_server_pklist(client.server_id) + self.build_friend_notification(status)
+            data = client.build_server_pklist(client.server_id) + self.build_friend_notification(status)
             client.transport.write(data)
 
     def message(self, text):
