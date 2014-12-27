@@ -46,9 +46,10 @@ PK_INGAME=17
 PK_LEAVEGAME=18
 
 # status used to distinguish between players in lobby and those in game
-LOBBY=1
-INGAME=2
-OFFLINE=3
+LOBBY=3
+INGAME=5
+OFFLINE=1
+ONLINE=3
 
 class TONChatServer(Protocol):
     
@@ -56,7 +57,7 @@ class TONChatServer(Protocol):
         self.clients = clients
         self.user = ""
         self.account_id = 0
-        self.status = LOBBY
+        self.status = OFFLINE
         self.server_id = 0
 
     # Connection management
@@ -96,6 +97,7 @@ class TONChatServer(Protocol):
                     #, bytes(welcomeMsg, "ascii")))
                     #self.sendlist(id)
                     #self.send_friend_notification(3)
+                    self.status = ONLINE
                     self.update_chat_status()
                 else:
                     self.transport.write(chr(0))
