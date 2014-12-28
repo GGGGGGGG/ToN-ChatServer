@@ -38,6 +38,7 @@ PK_JOIN=6
 PK_LEAVE=7
 PK_WHISPER=9
 PK_FRIENDLIST=12
+PK_FRIENDNOTF=13
 # client to server
 PK_ADDBUDDY=14
 PK_REMBUDDY=15
@@ -69,7 +70,7 @@ class TONChatServer(Protocol):
         print "Lost a client"
         self.leave(self.account_id)
         self.status = OFFLINE
-        self.update_chat_status()
+        self.broadcast_notification()
         self.clients.remove(self)       
     
     # Receiving data
@@ -138,13 +139,15 @@ class TONChatServer(Protocol):
             elif number == PK_INGAME:
                 #self.send_friend_notification(5)
                 self.status = INGAME
-                self.update_chat_status()
+                #self.update_chat_status()
+                self.broadcast_notification()
             elif number == PK_LEAVEGAME:
                 self.status = LOBBY
                 self.join()
                 self.server_id = 0
                 #self.send_friend_notification(3)
-                self.update_chat_status()
+                #self.update_chat_status()
+                self.broadcast_notification()
             elif number == PK_ADDBUDDY:
                 logging.warning("Packet ADDBUDDY unhandled")
             elif number == PK_REMBUDDY:
@@ -274,6 +277,13 @@ class TONChatServer(Protocol):
         num_notifications = 1
         data = struct.pack("<biibbi", PK_FRIENDLIST, num_notifications, int(self.account_id), status, 0, int(self.server_id))
         return data
+
+    def broadcast_notification(self):
+        for client in self.clients:
+            if client == self:
+                continue
+            data = struct.pack("<bibbi", PK_FRIENDNOTF, int(self.account_id), self.status, 0, int(self.server_id))
+            client.transport.write(data)
 
     def build_friendlist_notifications(self):
         buddydata = ""
