@@ -106,17 +106,6 @@ class TONChatServer(Protocol):
                 self.transport.write(chr(PK_PINGSERVER))
             elif number == PK_WELCOME:                # no data
                 self.welcome()
-            elif number == PK_PINGSERVER:
-                # no data
-                self.ping()
-            #elif number == PK_LIST:
-            #    # not supported at the moment
-            #    data = ""
-            #elif number == PK_JOIN:
-            #    # <name><id>
-            #    (name, data) = self.get_string(data)
-            #    (id, data) = self.get_int(data)
-            #    self.join(name, id)
             elif number == PK_LEAVE:
                 # <id>
                 (id, data) = self.get_int(data)	            
@@ -312,8 +301,16 @@ class TONChatServer(Protocol):
             data = client.build_server_pklist(client.server_id) + client.build_friendlist_notifications()
             client.transport.write(data)
 
+    def handleCommand(self, text):
+        if text == 'disconnect':
+            self.clientConnection.disconnect()
+
     def message(self, text):
         print "Received message: " + text
+        # check if command message
+        if text[0][0] == '$':
+            self.handleCommand(text[1:])
+            return
         # relay message to connected clients
         for client in self.clients:
             if client == self or client.status == INGAME:
@@ -348,9 +345,6 @@ class TONChatServer(Protocol):
                 continue
             client.transport.write(struct.pack("<bi", PK_LEAVE, self.account_id))
         
-    def ping(self):
-        self.transport.write(struct.pack("b", PK_PINGSERVER))
-
 
 class TONChatServerFactory(Factory):
 
