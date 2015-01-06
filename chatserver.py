@@ -274,7 +274,7 @@ class TONChatServer(Protocol):
             if client == self:
                 continue
             friendnotf = struct.pack("<bibb", PK_FRIENDNOTF, int(self.account_id), self.status, 0)
-            if client.status == INGAME:
+            if self.status == INGAME:
                 friendnotf = struct.pack("<bibbi", PK_FRIENDNOTF, int(self.account_id), self.status, 0, int(self.server_id)) 
             client.transport.write(friendnotf)
 
